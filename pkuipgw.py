@@ -24,7 +24,7 @@ class ConfError(Exception):
 
 class IPGWError(Exception):
     pass
-
+    
 class IPGWManager:
     def __init__(self, username, password, login = True):
         self.username = username
@@ -43,32 +43,52 @@ class IPGWManager:
         self.opener.open("https://its.pku.edu.cn/netportal/PKUIPGW?cmd=open&type=free&fr=0&sid=432").read()
 
     def connect(self, all = False):
-        url = 'https://its.pku.edu.cn/netportal/ipgwopen'
-        if all:
-            url += 'all'
+        url = 'https://its.pku.edu.cn/netportal/ITSipgw?cmd=open&type=fee'
         html = self.opener.open(url).read()
+        #url = 'https://its.pku.edu.cn/netportal/ipgwResult.jsp'
+        #html = self.opener.open(url).read()
         return self.format(html)
 
     def disconnect(self, all = False):
-        url = 'https://its.pku.edu.cn/netportal/ipgwclose'
-        if all:
-            url += 'all'
+        url = 'https://its.pku.edu.cn/netportal/ITSipgw?cmd=close&type='
+        if all: url += 'all'
+        else: url += 'self'
         html = self.opener.open(url).read()
         return self.format(html)
 
+    def disconnectIP(self):
+        url = 'https://its.pku.edu.cn/netportal/ITSipgw?cmd=getconnections'
+        html = self.opener.open(url).read()
+        print(self.format(html))
+        select = ''
+        while select not in self.conns: 
+            select = input('    断开第几个连接：')
+        if select == '0': return self.disconnet(all = False)
+        if select == '1': return self.disconnet(all = True)
+        url = 'https://its.pku.edu.cn/netportal/ITSipgw?cmd=disconnect&ip=' + self.conns[select]
+        html = self.opener.open(url).read()
+        return self.format(html)
+    
     def format(self, html):
         html = html.decode('utf-8')
-        if '网络断开成功' in html: html = '    网络断开成功'
-        elif '断开全部连接成功' in html: html = '    断开全部连接成功'
-        elif '连接数超过预定值' in html: html = '    连接数超过预定值'
-        elif '网络连接成功' in html:
-            i1 = html.index("<table noborder>")
-            i2 = html.index("</table></td></tr></table>")
-            html = html[i1+16:i2]
-            html = html.replace('<tr><td align=right>', '    ')
-            html = html.replace('</td><td align=left>', '')
-            html = html.replace('</td></tr>', '')
-            html = html.replace('    访问范围：收费地址、免费地址\n', '')
+        i1 = html.index("<table")
+        i2 = html.index("</table>")
+        html = html[i1:i2]
+        html = html.replace('<br>', '\n\t')
+        dr = re.compile(r'<[^>]+>|\r',re.S)
+        html = dr.sub('',html)
+        dr = re.compile(r'[ \t\n]{2,}',re.S)
+        html = dr.sub('\n    ',html)
+        if '地理位置' in html:
+            html = html.replace('\n', '')
+            html = html.replace('    20', '\n         20')
+            t = html.split('操作    ')[1].split('断开连接    ')
+            self.conns = {'0':'self', '1':'all'}
+            html = '\n    0  当前连接\n    1  全部连接\n'
+            for i in range(len(t)):
+                if len(t[i]) > 10:
+                    self.conns[str(i+2)] = t[i].split('    ')[0]
+                    html += '    ' + str(i+2) +'  ' + t[i] + '\n'
         return html
         
 
@@ -92,7 +112,7 @@ def in_main():
             'pkuipgwrc'
         ]
 
-    if len(args) < 1 or args[0] not in ['connect', 'disconnect']:
+    if len(args) < 1 or args[0] not in ['connect', 'disconnect', 'disconnectIP']:
         raise ArgError
     elif len(args) == 1:
         all = False
@@ -112,11 +132,12 @@ def in_main():
 
     ipgw = IPGWManager(config['username'], config['password'])
     os.system('cls')
-    print('\n')
     if args[0] == 'connect':
         print(ipgw.connect(all = all))
     elif args[0] == 'disconnect':
         print(ipgw.disconnect(all = all))
+    elif args[0] == 'disconnectIP':
+        print(ipgw.disconnectIP())
 
 def main():
     try:
@@ -124,7 +145,7 @@ def main():
     except ArgError:
         sys.stderr.write(
             'Usage: pkuipgw [-c cfg_file] [-c ...]'
-            ' (connect|disconnect) [all]\n'
+            ' (connect|disconnect|disconnectIP) [all]\n'
         )
         sys.exit(1)
     except ConfError:
